@@ -1,0 +1,108 @@
+---
+title: "Summay of circle experiment."
+author: "Jesse Leigh Patsolic"
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r render, eval=FALSE, echo=FALSE}
+require(foreach)
+require(grDevices)
+require(rmarkdown)
+require(rerf)
+rmarkdown::render("Summary.Rmd")
+system('open Summary.html')
+```
+
+# Problem statment 
+
+Consider a 100-gon where 10 vertices are colored 1 and
+the rest are colored 0 according to the following rules: 
+
+* Class 1 consists of two groups of 5 contiguous vertices colored 1.
+* Class 2 consists of two groups of 6 and 4 contiguous vertices, respectively, colored 1.
+
+
+### sampling
+
+```{r}
+set.seed(317)
+c1 <- 100
+c2 <- 100
+
+X1 <- foreach(i = 1:c1, .combine = rbind) %do% {
+  set.seed(i)
+  cir <- rep(0,100)
+
+  s1 <- sample(0:99, 1)
+  l1 <- s1:(s1 + 4) %% 100
+
+  s2 <- sample(setdiff(0:99, unique(c(l1, l1 - 4))), 1)
+  l2 <- s2:(s2 + 4) %% 100
+
+  cir[l1 + 1] <- 1
+  cir[l2 + 1] <- 1
+
+  cir
+}
+
+X2 <- foreach(i = 1:c2, .combine = rbind) %do% {
+  set.seed(i)
+  cir <- rep(0,100)
+
+  s1 <- sample(0:99, 1)
+  l1 <- s1:(s1 + 5) %% 100
+
+  s2 <- sample(setdiff(0:99, unique(c(l1, l1 - 3))), 1)
+  l2 <- s2:(s2 + 3) %% 100
+
+  cir[l1 + 1] <- 1
+  cir[l2 + 1] <- 1
+
+  cir
+}
+```
+
+## As an image
+```{r, fig.width = 10, fig.height = 12}
+X <- rbind(X1, X2)
+v <- as.raster(rbind(X1, X2))
+plot(v)
+#par(mfrow = c(1, 2))
+#v1 <- as.raster(X1)
+#v2 <- as.raster(X2)
+#plot(v1)
+#plot(v2)
+```
+
+## As Circles
+
+```{r, fig.width = 8, fig.height = 8}
+cs <- seq(0, 2 * pi - (2 * pi / 100), length = 100)
+
+x <- lapply(cs, sin)
+y <- lapply(cs, cos)
+
+set.seed(317)
+par(mfrow = c(5,5))
+for(j in sort(sample(nrow(X), 25))) {
+  par(mar = c(1,1,1,1))
+  plot(x, y, col = c('gray90', 'red')[X[j, ] + 1], asp = 1,
+       pch = 19, xaxt='n', yaxt='n', xlab = '', ylab = '',
+       cex = 0.5)
+  text(0,0, label = j)
+}
+#dev.off()
+```
+
+## Running Randomer Forest on the Vectors
+
+```{r}
+```
+
+
+
+
+
+
