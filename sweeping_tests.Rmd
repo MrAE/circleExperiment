@@ -1,0 +1,202 @@
+---
+title: "Circle experiment parameter sweep"
+author: "Jesse Leigh Patsolic"
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r, eval = FALSE, include = FALSE, echo = FALSE}
+require(devtools)
+devtools::install_github('mrae/R-rerF', 
+			 ref = 'b6214767253220a6e67f6d239e5d46e49142a4fc')
+rmarkdown::render("sweeping_tests.Rmd")
+#system("sweeping_tests.Rmd")
+```
+
+```{r, include = FALSE, echo = FALSE}
+require(ggplot2)
+require(foreach)
+require(grDevices)
+require(rmarkdown)
+require(rerf)
+require(devtools)
+require(doMC)
+registerDoMC(4)
+```
+
+
+# Problem statment 
+
+Consider a 100-gon where 10 vertices are colored 1 and
+the rest are colored 0 according to the following rules: 
+
+* Class 1 consists of two groups of 5 contiguous vertices colored 1.
+* Class 2 consists of two groups of 6 and 4 contiguous vertices, respectively, colored 1.
+
+
+### sampling toy data
+
+```{r}
+set.seed(317)
+n <- c(100, 250, 500, 1000)
+c1 <- n/2
+c2 <- n/2
+
+samp <- function(c1,c2){
+	X1 <- foreach(i = 1:sum(c1), .combine = rbind) %do% {
+	  set.seed(i)
+	  cir <- rep(0,100)
+	
+	  s1 <- sample(0:99, 1)
+	  l1 <- s1:(s1 + 4) %% 100
+	
+	  s2 <- sample(setdiff(0:99, unique(c(l1, l1 - 4))), 1)
+	  l2 <- s2:(s2 + 4) %% 100
+	
+	  cir[l1 + 1] <- 1
+	  cir[l2 + 1] <- 1
+	
+	  cir
+	}
+	
+	X2 <- foreach(i = 1:sum(c2), .combine = rbind) %do% {
+	  set.seed(i)
+	  cir <- rep(0,100)
+	
+	  s1 <- sample(0:99, 1)
+	  l1 <- s1:(s1 + 5) %% 100
+	
+	  s2 <- sample(setdiff(0:99, unique(c(l1, l1 - 3))), 1)
+	  l2 <- s2:(s2 + 3) %% 100
+	
+	  cir[l1 + 1] <- 1
+	  cir[l2 + 1] <- 1
+	
+	  cir
+	}
+	X <- as.matrix(rbind(X1, X2))
+	rownames(X) <- NULL
+	return(X)
+}
+
+X <- mapply(samp, c1, c2)
+Y  <- mapply(function(x,y) c(rep(0, x), rep(1, y)), c1,c2)
+
+
+set.seed(1030)
+strain <- lapply(X, function(x) sort(sample(nrow(x), floor(2 * nrow(x) / 3))))
+
+Xtrain <- mapply(function(x,s) x[s, ], X, strain)
+Ytrain <- mapply(function(y,s) y[s], Y, strain)
+
+stest <- mapply(function(x,s) setdiff(1:nrow(x), s), X, strain)
+
+Xtest <- mapply(function(x,s) x[s, ], X, stest)
+Ytest <- mapply(function(y,s) y[s], Y, stest)
+
+```
+
+## Visualizing some of the data as an image
+
+```{r, fig.width = 10, fig.height = 10}
+set.seed(1030)
+v <- as.raster(X[[1]][sort(sample(nrow(X[[1]]),100)),])
+plot(v)
+```
+
+## Visualizing some of the data as circles
+
+```{r, fig.width = 8, fig.height = 8}
+cs <- seq(0, 2 * pi - (2 * pi / 100), length = 100)
+
+x <- lapply(cs, sin)
+y <- lapply(cs, cos)
+
+set.seed(317)
+par(mfrow = c(5,5))
+for(j in sort(sample(nrow(X[[1]]), 25))) {
+  par(mar = c(1,1,1,1))
+  plot(x, y, col = c('gray90', 'red')[X[[1]][j, ] + 1], asp = 1,
+       pch = 19, xaxt='n', yaxt='n', xlab = '', ylab = '',
+       cex = 0.5)
+  text(0,0, label = ifelse(j < c1[1], "Class 1", "Class 2"))
+
+}
+```
+
+## Running Randomer Forest on the Vectors sweeping over $w$ holding $h = 1$.
+
+We have sampled `r n` samples
+
+```{r}
+p <- 100
+d <- 1
+iw <- 100
+ih <- 1
+patch.min <- 1L
+patch.max <- 10L
+#forest <- RerF(Xtrain, Ytrain, num.cores = 1L, mat.options = list(p, d, "image-patch-rectangles", iw, ih, patch.min, patch.max), seed = 1L) 
+#
+#(predictions <- Predict(Xtrain, forest, num.cores = 1L))
+#(error.rate <- mean(predictions != Ytrain))
+#
+#(predictions <- Predict(Xtest, forest, num.cores = 1L))
+#(error.rate <- mean(predictions != Ytest))
+```
+
+
+
+```{r}
+mw <- 2L
+Mw <- 15L
+
+rectMM <- expand.grid(width = mw:Mw, height = 1L)[, c(2,1)]
+
+opt.image.rect <- lapply(1:nrow(rectMM), 
+			  function(i) { 
+				  list(p, d, "image-patch-rectangles", 
+					     iw, ih, 
+					     patch.min = rectMM[i,1], 
+					     patch.max = rectMM[i,2]) 
+        }
+        )
+
+#opt.list <- c(opt.rf, opt.poisson, opt.image.squares, opt.image.rect)
+opt.list <- opt.image.rect
+
+run1 <- 
+  foreach(xi = 1:length(Xtrain)) %:% 
+  foreach(oi = opt.list) %dopar% {
+  forest <- RerF(Xtrain[[xi]], Ytrain[[xi]], 
+		 num.cores = 1L, mat.options = oi, seed = 1L) 
+  training.predictions <- Predict(Xtrain[[xi]], forest, num.cores = 1L)
+  training.error.rate <- mean(training.predictions != Ytrain[[xi]])
+
+  testing.predictions <- Predict(Xtest[[xi]], forest, num.cores = 1L)
+  testing.error.rate <- mean(testing.predictions != Ytest[[xi]])
+
+  list(forest = forest, pred = training.predictions, training.error = training.error.rate,
+       testing.error = testing.error.rate, testPred = testing.predictions)
+}
+
+training.Lhat <- lapply(run1, function(r) sapply(r, '[[', 3))
+testing.Lhat <- lapply(run1, function(r) sapply(r, '[[', 4))
+
+tr <- reshape2::melt(training.Lhat)[, -2]
+te <- reshape2::melt(testing.Lhat)[, -2]
+
+df0 <- data.frame(OOB = tr, 'Hold.out' = te)
+df00 <- data.frame(reshape2::melt(df0), run = 1:14, width = 2:15, n = rep(n, each = 14))
+df00$variable <- as.factor(df00$variable)
+```
+
+# Results
+
+Below is the plot for all
+```{r, fig.width = 8, fig.height = 8}
+ggplot(data = df00, aes(x = width, y = value, col = variable)) + geom_point() + 
+	scale_y_log10() + 
+	geom_hline(yintercept = c(0.01, 0.05), size = 0.1, colour = 'gray10') + 
+	facet_grid( n ~ ., labeller = labeller(n = label_both))
+```
