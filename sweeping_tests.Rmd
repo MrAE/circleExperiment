@@ -3,6 +3,7 @@ title: "Circle experiment parameter sweep"
 author: "Jesse Leigh Patsolic"
 output:
   html_document:
+    code_folding: hide
     fig_caption: yes
     fig_height: 8
     fig_width: 8
@@ -14,11 +15,14 @@ output:
   keep_md: true
 
 ---
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
 
 ```{r, eval = FALSE, include = FALSE, echo = FALSE}
-#require(devtools)
-#devtools::install_github('mrae/R-rerF', 
-#			 ref = 'b6214767253220a6e67f6d239e5d46e49142a4fc')
+require(devtools)
+devtools::install_github('mrae/R-rerF', 
+			 ref = 'b6214767253220a6e67f6d239e5d46e49142a4fc')
 rmarkdown::render("sweeping_tests.Rmd")
 #system("sweeping_tests.Rmd")
 ```
@@ -48,7 +52,7 @@ the rest are colored 0 according to the following rules:
 
 ```{r}
 set.seed(1030)
-n <- c(100, 250, 500, 1000)
+n <- 1*c(100, 250, 500, 1000)
 c1 <- n/2
 c2 <- n/2
 
@@ -139,7 +143,7 @@ for(j in sort(sample(nrow(X[[1]]), 25))) {
 We have created samples of size `r n` respectively and will run structured
 random forest on half and test on the rest. 
 
-```{r, cache = TRUE}
+```{r}
 p <- 100
 d <- 1
 iw <- 100
@@ -170,28 +174,39 @@ run1 <-
   forest <- RerF(Xtrain[[xi]], Ytrain[[xi]], 
 		 store.oob = TRUE,
 		 num.cores = 1L, mat.options = oi, seed = 1L) 
-  #training.predictions <- Predict(Xtrain[[xi]], forest, num.cores = 1L)
-  training.predictions <- OOBPredict(Xtrain[[xi]], forest, num.cores = 1L)
+  
+  oob.predictions <- OOBPredict(Xtrain[[xi]], forest, num.cores = 1L)
+  oob.error.rate <- mean(oob.predictions != Ytrain[[xi]])
+
+  training.predictions <- Predict(Xtrain[[xi]], forest, num.cores = 1L)
   training.error.rate <- mean(training.predictions != Ytrain[[xi]])
 
-  #testing.predictions <- Predict(Xtest[[xi]], forest, num.cores = 1L)
-  testing.predictions <- OOBPredict(Xtest[[xi]], forest, num.cores = 1L)
+  testing.predictions <- Predict(Xtest[[xi]], forest, num.cores = 1L)
   testing.error.rate <- mean(testing.predictions != Ytest[[xi]])
 
-  list(forest = forest, pred = training.predictions, training.error = training.error.rate,
-       testing.error = testing.error.rate, testPred = testing.predictions)
+  list(forest = forest, 
+       oob.error = oob.error.rate,
+       training.error = training.error.rate,
+       testing.error = testing.error.rate, 
+       oob.pred  = oob.predictions, 
+       training.pred = training.predictions,
+       test.pred = testing.predictions)
 }
 ```
 
 ```{r}
+oob.Lhat <- lapply(run1, function(r) sapply(r, '[[', 2))
 training.Lhat <- lapply(run1, function(r) sapply(r, '[[', 3))
 testing.Lhat <- lapply(run1, function(r) sapply(r, '[[', 4))
 
+oo <- reshape2::melt(oob.Lhat)[, -2]
 tr <- reshape2::melt(training.Lhat)[, -2]
 te <- reshape2::melt(testing.Lhat)[, -2]
 
 df0 <- data.frame(OOB = tr, 'Hold.out' = te)
+suppressMessages(
 df00 <- data.frame(reshape2::melt(df0), run = 1:14, width = 2:15, n = rep(n, each = 14))
+)
 df00$variable <- as.factor(df00$variable)
 df00$error.rate <- df00$value
 ```
