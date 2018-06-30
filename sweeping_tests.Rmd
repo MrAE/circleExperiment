@@ -21,8 +21,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 ```{r, eval = FALSE, include = FALSE, echo = FALSE}
 require(devtools)
-devtools::install_github('mrae/R-rerF', 
-			 ref = 'b6214767253220a6e67f6d239e5d46e49142a4fc')
+devtools::install_github('mrae/R-rerF', ref = 'b6214767253220a6e67f6d239e5d46e49142a4fc')
 rmarkdown::render("sweeping_tests.Rmd")
 #system("sweeping_tests.Rmd")
 ```
@@ -48,17 +47,17 @@ the rest are colored 0 according to the following rules:
 * Class 2 consists of two groups of 6 and 4 contiguous vertices, respectively, colored 1.
 
 
-### sampling toy data
+## sampling toy data
 
 ```{r}
-set.seed(1030)
+set.seed(601)
 n <- 1*c(100, 250, 500, 1000)
 c1 <- n/2
 c2 <- n/2
 
 samp <- function(c1,c2){
 	X1 <- foreach(i = 1:sum(c1), .combine = rbind) %do% {
-	  set.seed(i)
+	  set.seed(i^2)
 	  cir <- rep(0,100)
 	
 	  s1 <- sample(0:99, 1)
@@ -74,7 +73,7 @@ samp <- function(c1,c2){
 	}
 	
 	X2 <- foreach(i = 1:sum(c2), .combine = rbind) %do% {
-	  set.seed(i)
+	  set.seed(i^2)
 	  cir <- rep(0,100)
 	
 	  s1 <- sample(0:99, 1)
@@ -138,7 +137,7 @@ for(j in sort(sample(nrow(X[[1]]), 25))) {
 }
 ```
 
-## Running Randomer Forest on the Vectors sweeping over $w$ holding $h = 1$.
+# Running Structured Randomer Forest on the Vectors sweeping over $w$ holding $h = 1$.
 
 We have created samples of size `r n` respectively and will run structured
 random forest on half and test on the rest. 
@@ -204,14 +203,12 @@ tr <- reshape2::melt(training.Lhat)[, -2]
 te <- reshape2::melt(testing.Lhat)[, -2]
 
 df0 <- data.frame(OOB = tr, 'Hold.out' = te)
-suppressMessages(
 df00 <- data.frame(reshape2::melt(df0), run = 1:14, width = 2:15, n = rep(n, each = 14))
-)
 df00$variable <- as.factor(df00$variable)
 df00$error.rate <- df00$value
 ```
 
-# Results
+## Results
 
 Below are the results of each run sweeping over $w \in [2,15]$ for each of the $n$.
 Horizontal lines are plotted at 0.05 and 0.01.
@@ -224,5 +221,4 @@ ggplot(data = df00, aes(x = width, y = error.rate, col = variable)) + geom_point
 ```
 
 ---
-
 
