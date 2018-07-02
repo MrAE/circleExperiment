@@ -49,6 +49,8 @@ the rest are colored 0 according to the following rules:
 
 ## sampling toy data
 
+We sample equally from the distributions described above and futher divide them 50/50 into training and testing sets. 
+
 ```{r}
 set.seed(601)
 n <- 1*c(100, 250, 500, 1000)
