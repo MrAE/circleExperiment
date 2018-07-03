@@ -63,7 +63,8 @@ We sample equally from the distributions described above and futher divide them 
 ```{r sampling}
 #set.seed(601)
 set.seed(1234)
-n <- 1/2 * c(100, 250, 500, 1000, 2000, 4000, 8000)
+n <- 1/2 * c(100, 250, 500, 1000, 2000, 4000)
+n <- 1/2 * c(400, 800, 2000, 4000)
 c1 <- n
 c2 <- n
 
@@ -227,9 +228,9 @@ Horizontal lines are plotted at 0.05 and 0.01.
 
 ```{r ggplot, fig.width = 8, fig.height = 8}
 ggplot(data = df00, aes(x = width, y = error.rate, col = variable)) + 
-	geom_point(alpha = 0.75) + 
 	scale_y_log10() + 
 	geom_hline(yintercept = c(0.01, 0.05), size = 0.1, colour = 'gray10') + 
+	geom_point(alpha = 0.65, aes(shape = variable)) + 
 	facet_grid( n ~ ., labeller = labeller(n = label_both))
 ```
 
