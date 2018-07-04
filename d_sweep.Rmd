@@ -1,0 +1,252 @@
+---
+title: "Circle experiment parameter sweep over d"
+author: "Jesse Leigh Patsolic"
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    fig_height: 8
+    fig_width: 8
+    highlight: pygments
+    number_sections: yes
+    theme: cerulean
+    toc: yes
+    toc_depth: 2
+  keep_md: true
+
+---
+
+<style type="text/css">
+.table {
+    width: 40%;
+}
+tr:hover {background-color:#f5f5f5;}
+</style>
+
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = FALSE)
+```
+
+```{r, eval = FALSE, include = FALSE, echo = FALSE}
+require(devtools)
+devtools::install_github('mrae/R-rerF', ref = 'b6214767253220a6e67f6d239e5d46e49142a4fc')
+rmarkdown::render("d_sweep.Rmd")
+#system("sweeping_tests.Rmd")
+```
+
+```{r packages, include = FALSE, echo = FALSE}
+require(ggplot2)
+require(foreach)
+require(grDevices)
+require(rmarkdown)
+require(rerf)
+require(devtools)
+require(doMC)
+registerDoMC(4)
+```
+
+
+# Problem statment 
+
+Consider a 100-gon where 10 vertices are colored 1 and
+the rest are colored 0 according to the following rules: 
+
+* Class 1 consists of two groups of 5 contiguous vertices colored 1.
+* Class 2 consists of two groups of 6 and 4 contiguous vertices, respectively, colored 1.
+
+
+## sampling toy data
+
+We sample equally from the distributions described above and futher divide them 50/50 into training and testing sets. 
+
+```{r sampling}
+#set.seed(601)
+set.seed(1234)
+n <- 1/2 * c(100, 250, 500, 1000, 2000, 4000)
+n <- 1/2 * c(400, 800, 2000, 4000)
+c1 <- n
+c2 <- n
+
+samp <- function(c1,c2){
+	X1 <- foreach(i = 1:sum(c1), .combine = rbind) %do% {
+	  set.seed(i^2)
+	  cir <- rep(0,100)
+	
+	  s1 <- sample(0:99, 1)
+	  l1 <- s1:(s1 + 4) %% 100
+	
+	  s2 <- sample(setdiff(0:99, unique(c(l1, l1 - 4))), 1)
+	  l2 <- s2:(s2 + 4) %% 100
+	
+	  cir[l1 + 1] <- 1
+	  cir[l2 + 1] <- 1
+	
+	  cir
+	}
+	
+	X2 <- foreach(i = 1:sum(c2), .combine = rbind) %do% {
+	  set.seed(i^2)
+	  cir <- rep(0,100)
+	
+	  s1 <- sample(0:99, 1)
+	  l1 <- s1:(s1 + 5) %% 100
+	
+	  s2 <- sample(setdiff(0:99, unique(c(l1, l1 - 3))), 1)
+	  l2 <- s2:(s2 + 3) %% 100
+	
+	  cir[l1 + 1] <- 1
+	  cir[l2 + 1] <- 1
+	
+	  cir
+	}
+	X <- as.matrix(rbind(X1, X2))
+	rownames(X) <- NULL
+	return(X)
+}
+
+X <- mapply(samp, c1, c2)
+Y  <- mapply(function(x,y) c(rep(0, x), rep(1, y)), c1,c2)
+
+
+set.seed(1030)
+strain <- lapply(X, function(x) sort(sample(nrow(x), floor(nrow(x)/2))))
+
+Xtrain <- mapply(function(x,s) x[s, ], X, strain)
+Ytrain <- mapply(function(y,s) y[s], Y, strain)
+
+stest <- mapply(function(x,s) setdiff(1:nrow(x), s), X, strain)
+
+Xtest <- mapply(function(x,s) x[s, ], X, stest)
+Ytest <- mapply(function(y,s) y[s], Y, stest)
+```
+
+
+# Running R-Rerf
+
+We have created samples of size `r n` respectively and will run structured
+random forest on half and test on the rest. 
+
+```{r run-rf}
+p <- 100
+d <- c(5,10,15)
+iw <- 100
+ih <- 1
+
+mw <- 2L
+Mw <- 15L
+
+pm <- c(2,8,16)
+
+rectMM <- expand.grid(p.max = pm, d = d)
+
+opt.list <- lapply(1:nrow(rectMM), 
+			  function(i) { 
+				  list(p = p, d = rectMM[i,2], 
+				       "image-patch-rectangles", 
+				       iw = iw, ih = ih, 
+				       patch.min = 1L, 
+                                       patch.max = rectMM[i,1]) 
+        }
+        )
+
+```
+
+
+
+```{r}
+run1 <- 
+  foreach(xi = 1:length(Xtrain), .combine = rbind) %:% 
+  foreach(oi = opt.list, .combine = rbind) %dopar% {
+  forest <- RerF(Xtrain[[xi]], Ytrain[[xi]], 
+		 store.oob = TRUE,
+		 num.cores = 1L, mat.options = oi, seed = 1L) 
+  
+  oob.predictions <- OOBPredict(Xtrain[[xi]], forest, num.cores = 1L)
+  oob.error.rate <- mean(oob.predictions != Ytrain[[xi]])
+
+  training.predictions <- Predict(Xtrain[[xi]], forest, num.cores = 1L)
+  training.error.rate <- mean(training.predictions != Ytrain[[xi]])
+
+  testing.predictions <- Predict(Xtest[[xi]], forest, num.cores = 1L)
+  testing.error.rate <- mean(testing.predictions != Ytest[[xi]])
+
+  data.frame(
+       n = n[xi],
+       d = oi$d,
+       patch.max = oi$patch.max,
+       #forest = forest, 
+       oob.error = oob.error.rate,
+       training.error = training.error.rate,
+       testing.error = testing.error.rate)
+       #oob.pred  = oob.predictions, 
+       #training.pred = training.predictions,
+       #test.pred = testing.predictions)
+}
+```
+
+```{r get-lhat}
+oob.Lhat <- lapply(run1, function(r) sapply(r, '[[', 2))
+training.Lhat <- lapply(run1, function(r) sapply(r, '[[', 3))
+testing.Lhat <- lapply(run1, function(r) sapply(r, '[[', 4))
+
+oo <- reshape2::melt(oob.Lhat)[, -2]
+tr <- reshape2::melt(training.Lhat)[, -2]
+te <- reshape2::melt(testing.Lhat)[, -2]
+
+df0 <- data.frame(OOB = oo, 'Hold.out' = te, training = tr)
+df00 <- data.frame(reshape2::melt(df0), run = 1:14, width = 2:15, n = rep(n, each = 14))
+df00$variable <- as.factor(df00$variable)
+df00$error.rate <- df00$value
+```
+
+## Results
+
+Below are the results of each run sweeping over $w \in [2,15]$ for each of the $n$.
+Horizontal lines are plotted at 0.05 and 0.01.
+
+```{r ggplot, fig.width = 8, fig.height = 8}
+ggplot(data = run1, aes(x = patch.max)) + 
+	scale_y_log10() + 
+	geom_point(aes(y = oob.error), col = 1, shape = 1) + 
+	geom_point(aes(y = training.error), col = 2, shape = 2) + 
+	geom_hline(yintercept = c(0.01, 0.05), size = 0.1, colour = 'gray10') + 
+	#geom_point(alpha = 0.65, aes(shape = as.factor(n))) + 
+	facet_grid(n ~ d, labeller = labeller(n = label_both, d = label_both))
+dev.off()
+```
+
+
+
+```{r}
+te.ws <- unlist(lapply(testing.Lhat, which.min))
+tr.ws <- unlist(lapply(training.Lhat, which.min))
+oo.ws <- unlist(lapply(oob.Lhat, which.min))
+
+tr.lhat <- mapply(function(x,y){ training.Lhat[[x]][y] },
+        	1:length(training.Lhat), lapply(training.Lhat, which.min))
+
+te.lhat <- mapply(function(x,y){ testing.Lhat[[x]][y] },
+        	1:length(testing.Lhat), lapply(testing.Lhat, which.min))
+
+oob.lhat <- mapply(function(x,y){ oob.Lhat[[x]][y] },
+        	1:length(oob.Lhat), lapply(oob.Lhat, which.min))
+ns <- n
+
+tab1 <- data.frame(n.train = ns, 
+		   OOB.error = oob.lhat, oob.width = oo.ws,
+		   Hold.out.error = te.lhat, test.width = te.ws,
+		   training.error = tr.lhat, train.width = tr.ws)
+```
+
+### Best $\hat{L}$	
+```{r, results = 'asis'}
+knitr::kable(round(tab1, 3))
+```
+
+---
+
+
+
+
+
