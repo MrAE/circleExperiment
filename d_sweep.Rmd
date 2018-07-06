@@ -1,5 +1,5 @@
 ---
-title: "Circle experiment parameter sweep over d"
+title: "Circle experiment parameter sweep."
 author: "Jesse Leigh Patsolic"
 output:
   html_document:
@@ -63,7 +63,6 @@ We sample equally from the distributions described above and futher divide them 
 ```{r sampling}
 #set.seed(601)
 set.seed(1234)
-n <- 1/2 * c(100, 250, 500, 1000, 2000, 4000)
 n <- 1/2 * c(400, 800, 2000, 4000)
 c1 <- n
 c2 <- n
@@ -129,14 +128,15 @@ random forest on half and test on the rest.
 
 ```{r run-rf}
 p <- 100
-d <- c(5,10,15)
+d <- c(1, 5, seq(20,100, by = 20))
 iw <- 100
 ih <- 1
 
 mw <- 2L
 Mw <- 15L
 
-pm <- c(2,8,16)
+#pm <- c(2,8,16)
+pm <- mw:Mw
 
 rectMM <- expand.grid(p.max = pm, d = d)
 
@@ -149,7 +149,6 @@ opt.list <- lapply(1:nrow(rectMM),
                                        patch.max = rectMM[i,1]) 
         }
         )
-
 ```
 
 
@@ -185,63 +184,38 @@ run1 <-
 }
 ```
 
-```{r get-lhat}
-oob.Lhat <- lapply(run1, function(r) sapply(r, '[[', 2))
-training.Lhat <- lapply(run1, function(r) sapply(r, '[[', 3))
-testing.Lhat <- lapply(run1, function(r) sapply(r, '[[', 4))
-
-oo <- reshape2::melt(oob.Lhat)[, -2]
-tr <- reshape2::melt(training.Lhat)[, -2]
-te <- reshape2::melt(testing.Lhat)[, -2]
-
-df0 <- data.frame(OOB = oo, 'Hold.out' = te, training = tr)
-df00 <- data.frame(reshape2::melt(df0), run = 1:14, width = 2:15, n = rep(n, each = 14))
-df00$variable <- as.factor(df00$variable)
-df00$error.rate <- df00$value
-```
-
 ## Results
 
 Below are the results of each run sweeping over $w \in [2,15]$ for each of the $n$.
 Horizontal lines are plotted at 0.05 and 0.01.
 
 ```{r ggplot, fig.width = 8, fig.height = 8}
-ggplot(data = run1, aes(x = patch.max)) + 
+p1 <- ggplot(data = run1, aes(x = patch.max)) + 
 	scale_y_log10() + 
 	geom_point(aes(y = oob.error), col = 1, shape = 1) + 
 	geom_point(aes(y = training.error), col = 2, shape = 2) + 
+	geom_point(aes(y = testing.error), col = 3, shape = 3) + 
 	geom_hline(yintercept = c(0.01, 0.05), size = 0.1, colour = 'gray10') + 
 	#geom_point(alpha = 0.65, aes(shape = as.factor(n))) + 
 	facet_grid(n ~ d, labeller = labeller(n = label_both, d = label_both))
-dev.off()
+print(p1)
 ```
 
 
 
-```{r}
-te.ws <- unlist(lapply(testing.Lhat, which.min))
-tr.ws <- unlist(lapply(training.Lhat, which.min))
-oo.ws <- unlist(lapply(oob.Lhat, which.min))
-
-tr.lhat <- mapply(function(x,y){ training.Lhat[[x]][y] },
-        	1:length(training.Lhat), lapply(training.Lhat, which.min))
-
-te.lhat <- mapply(function(x,y){ testing.Lhat[[x]][y] },
-        	1:length(testing.Lhat), lapply(testing.Lhat, which.min))
-
-oob.lhat <- mapply(function(x,y){ oob.Lhat[[x]][y] },
-        	1:length(oob.Lhat), lapply(oob.Lhat, which.min))
-ns <- n
-
-tab1 <- data.frame(n.train = ns, 
-		   OOB.error = oob.lhat, oob.width = oo.ws,
-		   Hold.out.error = te.lhat, test.width = te.ws,
-		   training.error = tr.lhat, train.width = tr.ws)
+```{r, include = FALSE, echo = FALSE}
+pdf('plot1.pdf', height = 8, width = 14)
+print(p1)
+dev.off()
+mtab <- sapply(n, function(nt) {
+       tmp <- which.min(run1[run1$n == nt, ]$testing.error)
+       identity(run1[run1$n == nt, ][tmp,])
+		   })
 ```
 
 ### Best $\hat{L}$	
 ```{r, results = 'asis'}
-knitr::kable(round(tab1, 3))
+knitr::kable(t(mtab))
 ```
 
 ---
