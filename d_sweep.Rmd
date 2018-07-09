@@ -30,7 +30,9 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = FAL
 
 ```{r, eval = FALSE, include = FALSE, echo = FALSE}
 require(devtools)
-devtools::install_github('mrae/R-rerF', ref = 'b6214767253220a6e67f6d239e5d46e49142a4fc')
+#ref <- '5bce7519043640bba54867c4070df11af7c09d78'
+#devtools::install_github('mrae/R-rerF', ref = ref)
+
 rmarkdown::render("d_sweep.Rmd")
 #system("sweeping_tests.Rmd")
 ```
@@ -43,7 +45,7 @@ require(rmarkdown)
 require(rerf)
 require(devtools)
 require(doMC)
-registerDoMC(4)
+registerDoMC(6)
 ```
 
 
@@ -146,7 +148,7 @@ opt.list <- lapply(1:nrow(rectMM),
 				       "image-patch-rectangles", 
 				       iw = iw, ih = ih, 
 				       patch.min = 1L, 
-                                       patch.max = rectMM[i,1]) 
+               patch.max = rectMM[i,1]) 
         }
         )
 ```
@@ -192,13 +194,16 @@ Horizontal lines are plotted at 0.05 and 0.01.
 ```{r ggplot, fig.width = 8, fig.height = 8}
 p1 <- ggplot(data = run1, aes(x = patch.max)) + 
 	scale_y_log10() + 
-	geom_point(aes(y = oob.error), col = 1, shape = 1) + 
-	geom_point(aes(y = training.error), col = 2, shape = 2) + 
-	geom_point(aes(y = testing.error), col = 3, shape = 3) + 
+	geom_point(aes(y = oob.error, col = "oob.error", shape = "oob.error"), alpha = 0.75) + 
+	geom_point(aes(y = training.error, col = "train", shape = "train"), alpha = 0.75) + 
+	geom_point(aes(y = testing.error, col = "test", shape = "test"), alpha = 0.75) + 
 	geom_hline(yintercept = c(0.01, 0.05), size = 0.1, colour = 'gray10') + 
 	#geom_point(alpha = 0.65, aes(shape = as.factor(n))) + 
 	facet_grid(n ~ d, labeller = labeller(n = label_both, d = label_both))
-print(p1)
+#print(p1)
+pdf("Rplots.pdf", w=12,h = 8)
+p1  + guides(col = guide_legend())
+dev.off()
 ```
 
 
@@ -218,8 +223,134 @@ mtab <- sapply(n, function(nt) {
 knitr::kable(t(mtab))
 ```
 
----
+# Using ts-patch options 
 
+```{r rf-params}
+p <- 100
+d <- seq(20,100, by = 20)
+
+rectMM <- expand.grid(p.min = 2L:15L, p.max = 2L:15L, d = d)
+rectMM <- rectMM[rectMM$p.min < rectMM$p.max,]
+
+opt.list2 <- lapply(1:nrow(rectMM), 
+			  function(i) { 
+				  list(p = p, d = rectMM[i, 3], 
+				       "ts-patch", 
+				       patch.min = rectMM[i, 1], 
+               patch.max = rectMM[i, 2]) 
+        }
+        )
+
+```
+
+```{r}
+run2 <- 
+  foreach(xi = 1:length(Xtrain), .combine = rbind) %:% 
+  foreach(oi = opt.list2, .combine = rbind) %dopar% {
+  forest <- RerF(Xtrain[[xi]], Ytrain[[xi]], 
+		 store.oob = TRUE,
+		 num.cores = 1L, mat.options = oi, seed = 1L) 
+  
+  oob.predictions <- OOBPredict(Xtrain[[xi]], forest, num.cores = 1L)
+  oob.error.rate <- mean(oob.predictions != Ytrain[[xi]])
+
+  training.predictions <- Predict(Xtrain[[xi]], forest, num.cores = 1L)
+  training.error.rate <- mean(training.predictions != Ytrain[[xi]])
+
+  testing.predictions <- Predict(Xtest[[xi]], forest, num.cores = 1L)
+  testing.error.rate <- mean(testing.predictions != Ytest[[xi]])
+
+  data.frame(
+       n = n[xi],
+       d = oi$d,
+       patch.max = oi$patch.max,
+       patch.min = oi$patch.min,
+       oob.error = oob.error.rate,
+       training.error = training.error.rate,
+       testing.error = testing.error.rate)
+
+}
+```
+
+## Results
+
+Below are the results of each run sweeping over $w \in [2,15]$ for each of the $n$.
+Horizontal lines are plotted at 0.05 and 0.01.
+
+```{r ggplot-2, fig.width = 8, fig.height = 8}
+p2 <- ggplot(data = run2, aes(x = patch.max)) + 
+	scale_y_log10() + 
+	#geom_point(aes(y = oob.error, col = "oob.error", shape = "oob.error"), alpha = 0.75) + 
+	#geom_point(aes(y = training.error, col = "train", shape = "train"), alpha = 0.75) + 
+	#geom_point(aes(y = testing.error, col = "test", shape = "test"), alpha = 0.75) + 
+	geom_hline(yintercept = c(0.01, 0.05), size = 0.1, colour = 'gray10') + 
+	geom_point(aes(y = testing.error, col = "testing.error", shape = "testing.error"), alpha = 0.75) + 
+	geom_point(aes(y = training.error, col = "training.error", shape = "training.error"), alpha = 0.75) + 
+	geom_point(aes(y = oob.error, col = "oob.error", shape = "oob.error"), alpha = 0.75) + 
+	facet_grid(patch.min ~ d + n, labeller = labeller(n = label_both, d = label_both))
+
+print(p2)
+```
+
+
+```{r, fig.width = 8, fig.height = 12}
+p3.testing <- 
+  ggplot(data = run2,
+             aes(x = patch.min, y = patch.max)) + 
+       geom_raster(aes(fill = testing.error)) + 
+       scale_fill_gradient2(
+         low  = "#006600", 
+         mid  = "white", 
+         high = "#000000", 
+         midpoint = log10(0.05), 
+         trans = 'log10',
+         breaks = c(0.001, 0.05, 0.01,0.1,1)) + 
+       facet_grid(d ~ n, labeller = labeller(d = label_both, n = label_both))
+
+p3.training <- 
+  ggplot(data = run2,
+             aes(x = patch.min, y = patch.max)) + 
+       geom_raster(aes(fill = training.error)) + 
+       scale_fill_gradient2(
+         low  = "#006600", 
+         mid  = "white", 
+         high = "#000000", 
+         midpoint = log10(0.05), 
+         trans = 'log10',
+         breaks = c(0.001, 0.05, 0.01,0.1,1)) + 
+       facet_grid(d ~ n, labeller = labeller(d = label_both, n = label_both))
+
+p3.oob <- 
+  ggplot(data = run2,
+             aes(x = patch.min, y = patch.max)) + 
+       geom_raster(aes(fill = oob.error)) + 
+       scale_fill_gradient2(
+         low  = "#006600", 
+         mid  = "white", 
+         high = "#000000", 
+         midpoint = log10(0.05), 
+         trans = 'log10',
+         breaks = c(0.001, 0.05, 0.01,0.1,1)) + 
+       facet_grid(d ~ n, labeller = labeller(d = label_both, n = label_both))
+
+show(gridExtra::grid.arrange(p3.training, p3.oob, p3.testing))
+```
+
+## Min testing error 
+
+```{r, include = FALSE, echo = FALSE}
+mtab2 <- sapply(n, function(nt) {
+       tmp1 <- which.min(run2[run2$n == nt, ]$testing.error)
+       tmp2 <- which.min(run2[run2$n == nt, ]$training.error)
+       tmp3 <- which.min(run2[run2$n == nt, ]$oob.error)
+       run2[run2$n == nt, ][c(tmp1,tmp2,tmp3),]
+		   })
+```
+
+### Best $\hat{L}$	
+```{r, results = 'asis'}
+knitr::kable(t(mtab2))
+```
 
 
 
