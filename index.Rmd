@@ -24,6 +24,7 @@ rmarkdown::render("index.Rmd")
 ```{r packages, include = FALSE, echo = FALSE}
 require(ggplot2)
 require(foreach)
+require(viridis)
 require(grDevices)
 require(rmarkdown)
 require(rerf)
@@ -38,6 +39,7 @@ CIS/AMS department brought up an interesting problem.
 
 Deep learning and diffeomorphic learning have similar properties. 
 The only algorithm that did well on the following problem was **MLP**.
+We believe that S-RerF can do better. 
 
 ## Problem statement 
 
@@ -226,20 +228,28 @@ comp <- data.frame(
           RF =       c(0.505, 0.497, 0.499, 0.510),
           kNN =      c(0.532, 0.488, 0.403, 0.283),
           MLP =      c(0.411, 0.144, 0.024, 0.013),
-          R.RerF  =  c(0.09 , 0.045, 0.037, 0.03)
+          S.RerF  =  c(0.09 , 0.045, 0.037, 0.03)
           )
 
 dat <- cbind(reshape2::melt(comp[, -1]), training.samples = comp$train)
 dat$algorithm <- as.factor(dat$variable)
 dat$fraction.error <- dat$value
-head(dat)
+
+colorJ<-c("#440154FF","#443A83FF","#31688EFF","#21908CFF","#FFAA00FF","#FDE725FF","#35B779FF")
 
 p.comp <- 
   ggplot(data = dat, aes(x = training.samples, y = fraction.error, colour = algorithm)) + 
   geom_point() + 
-  scale_y_continuous(breaks = c(0.01, seq(0.0,0.7, by = 0.05))) + 
+  scale_colour_manual(values = colorJ) + 
+  scale_x_continuous(breaks = n, minor_breaks = NULL) +
+  scale_y_continuous(breaks = c(0.01, seq(0.0,0.7, by = 0.05)),
+                     minor_breaks = seq(0.025, 0.55, by = 0.025)) + 
   #geom_hline(yintercept = c(0.05, 0.01)) + 
+  xlab("Training samples") + 
+  ylab("Fraction error") +
+  ggtitle("Using Structure is better") +
   geom_line(alpha = 0.75)
+plot(p.comp)
 ```
 
 # Comparison of R-Rerf to other algorithms
@@ -248,8 +258,9 @@ p.comp <-
 plot(p.comp)
 ```
 
-
-
-
-
-
+```{r, echo = FALSE, include = FALSE}
+pdf("compare.pdf", height = 5, width = 4)
+plot(p.comp)
+dev.off()
+#system('mupdf-gl compare.pdf &') 
+```
