@@ -10,13 +10,9 @@ output      :
     fonttheme:  "structurebold"
 ---
 
-```{r include=FALSE}
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, cache = TRUE,
-                      dpi = 300)
-```
-
 ```{r, echo=FALSE, eval=FALSE}
 require(rmarkdown)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, cache = FALSE, dpi = 300)
 
 rmarkdown::render("index.Rmd")
 #system('open index.html')
@@ -218,6 +214,42 @@ knitr::kable(t(mtab2)[, c(1,2,7,3,4)])
 |   400            | 0.465    | 0.467    | 0.498 |0.497|0.488|0.144|0.045   |
 |   1000           | 0.543    | 0.549    | 0.450 |0.499|0.403|0.024|0.037   |
 |   2000           | 0.514    | 0.512    | 0.442 |0.510|0.283|0.013|0.03    |
+
+
+
+```{r, echo = FALSE, include = FALSE}
+comp <- data.frame( 
+          training_samples = c(200, 400, 1000, 2000),
+          Log.Reg = c(0.513,0.465,0.543, 0.514),
+          Lin.SVM =  c(0.515, 0.467, 0.549, 0.512),
+          SVM  =     c(0.460, 0.498, 0.450, 0.442),
+          RF =       c(0.505, 0.497, 0.499, 0.510),
+          kNN =      c(0.532, 0.488, 0.403, 0.283),
+          MLP =      c(0.411, 0.144, 0.024, 0.013),
+          R.RerF  =  c(0.09 , 0.045, 0.037, 0.03)
+          )
+
+dat <- cbind(reshape2::melt(comp[, -1]), training.samples = comp$train)
+dat$algorithm <- as.factor(dat$variable)
+dat$fraction.error <- dat$value
+head(dat)
+
+p.comp <- 
+  ggplot(data = dat, aes(x = training.samples, y = fraction.error, colour = algorithm)) + 
+  geom_point() + 
+  scale_y_continuous(breaks = c(0.01, seq(0.0,0.7, by = 0.05))) + 
+  #geom_hline(yintercept = c(0.05, 0.01)) + 
+  geom_line(alpha = 0.75)
+```
+
+# Comparison of R-Rerf to other algorithms
+
+```{r, echo = FALSE, fig.width = 12}
+plot(p.comp)
+```
+
+
+
 
 
 

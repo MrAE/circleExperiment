@@ -25,7 +25,7 @@ tr:hover {background-color:#f5f5f5;}
 
 
 ```{r include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = FALSE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = TRUE)
 ```
 
 ```{r, eval = FALSE, include = FALSE, echo = FALSE}
@@ -128,7 +128,7 @@ Ytest <- mapply(function(y,s) y[s], Y, stest)
 We have created samples of size `r n` respectively and will run structured
 random forest on half and test on the rest. 
 
-```{r run-rf}
+```{r param-rf1}
 p <- 100
 d <- c(1, 5, seq(20,100, by = 20))
 iw <- 100
@@ -155,7 +155,7 @@ opt.list <- lapply(1:nrow(rectMM),
 
 
 
-```{r}
+```{r run1-rf}
 run1 <- 
   foreach(xi = 1:length(Xtrain), .combine = rbind) %:% 
   foreach(oi = opt.list, .combine = rbind) %dopar% {
@@ -200,7 +200,7 @@ p1 <- ggplot(data = run1, aes(x = patch.max)) +
 	geom_hline(yintercept = c(0.01, 0.05), size = 0.1, colour = 'gray10') + 
 	#geom_point(alpha = 0.65, aes(shape = as.factor(n))) + 
 	facet_grid(n ~ d, labeller = labeller(n = label_both, d = label_both))
-#print(p1)
+print(p1)
 pdf("Rplots.pdf", w=12,h = 8)
 p1  + guides(col = guide_legend())
 dev.off()
@@ -208,7 +208,7 @@ dev.off()
 
 
 
-```{r, include = FALSE, echo = FALSE}
+```{r tab1, include = FALSE, echo = FALSE}
 pdf('plot1.pdf', height = 8, width = 14)
 print(p1)
 dev.off()
@@ -225,7 +225,7 @@ knitr::kable(t(mtab))
 
 # Using ts-patch options 
 
-```{r rf-params}
+```{r param2-rf}
 p <- 100
 d <- seq(20,100, by = 20)
 
@@ -243,7 +243,7 @@ opt.list2 <- lapply(1:nrow(rectMM),
 
 ```
 
-```{r}
+```{r run2-rf}
 run2 <- 
   foreach(xi = 1:length(Xtrain), .combine = rbind) %:% 
   foreach(oi = opt.list2, .combine = rbind) %dopar% {
@@ -333,7 +333,8 @@ p3.oob <-
          breaks = c(0.001, 0.05, 0.01,0.1,1)) + 
        facet_grid(d ~ n, labeller = labeller(d = label_both, n = label_both))
 
-show(gridExtra::grid.arrange(p3.training, p3.oob, p3.testing))
+#show(gridExtra::grid.arrange(p3.training, p3.oob, p3.testing))
+p3.testing     
 ```
 
 ## Min testing error 
